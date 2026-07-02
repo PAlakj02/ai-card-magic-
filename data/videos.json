@@ -1,0 +1,21 @@
+{
+  "trickVideos": [
+    { "id": 1,  "trick": "Double Lift",   "youtubeId": "Gjd4EDm3EWU", "thumbnail": "https://img.youtube.com/vi/Gjd4EDm3EWU/maxresdefault.jpg" },
+    { "id": 2,  "trick": "Double Lift",   "youtubeId": "8OpUGoXb63w", "thumbnail": "https://img.youtube.com/vi/8OpUGoXb63w/maxresdefault.jpg" },
+    { "id": 3,  "trick": "False Shuffle", "youtubeId": "ZGHd-iYJyMk", "thumbnail": "https://img.youtube.com/vi/ZGHd-iYJyMk/maxresdefault.jpg" },
+    { "id": 4,  "trick": "False Shuffle", "youtubeId": "hT7KGNiiDVI", "thumbnail": "https://img.youtube.com/vi/hT7KGNiiDVI/maxresdefault.jpg" },
+    { "id": 5,  "trick": "Classic Force", "youtubeId": "0kxSPJzKYkg", "thumbnail": "https://img.youtube.com/vi/0kxSPJzKYkg/maxresdefault.jpg" },
+    { "id": 6,  "trick": "Classic Force", "youtubeId": "sjILsOGLVUY", "thumbnail": "https://img.youtube.com/vi/sjILsOGLVUY/maxresdefault.jpg" },
+    { "id": 7,  "trick": "Charlier Cut",  "youtubeId": "BNC_DD9XccI", "thumbnail": "https://img.youtube.com/vi/BNC_DD9XccI/maxresdefault.jpg" },
+    { "id": 8,  "trick": "Charlier Cut",  "youtubeId": "KUnCdxYyHLo", "thumbnail": "https://img.youtube.com/vi/KUnCdxYyHLo/maxresdefault.jpg" },
+    { "id": 9,  "trick": "Invisible Palm","youtubeId": "-3NNX_4InXI", "thumbnail": "https://img.youtube.com/vi/-3NNX_4InXI/maxresdefault.jpg" },
+    { "id": 10, "trick": "Invisible Palm","youtubeId": "L0XZYm3C_Oc", "thumbnail": "https://img.youtube.com/vi/L0XZYm3C_Oc/maxresdefault.jpg" },
+    { "id": 11, "trick": "Thumb Fan",     "youtubeId": "M85gA8Zwzzk", "thumbnail": "https://img.youtube.com/vi/M85gA8Zwzzk/maxresdefault.jpg" },
+    { "id": 12, "trick": "Thumb Fan",     "youtubeId": "yOywyktF0Iw", "thumbnail": "https://img.youtube.com/vi/yOywyktF0Iw/maxresdefault.jpg" }
+  ],
+  "playlists": [
+    { "level": "Beginner",     "playlistId": "PLtuqXoD-IIwI47n3ZyahEaEj3DLIPHUe5" },
+    { "level": "Intermediate", "playlistId": "PLGpWgwtRb0QRVeRRKAtBaVnp7O9vtv4Nl" },
+    { "level": "Advanced",     "playlistId": "PLshVXpV81QkKMz0nm3L2NBmF4jRibCO69" }
+  ]
+}
