@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import Image from 'next/image'
 import { Zap, Clock, ChevronRight } from 'lucide-react'
 import { videoLesson } from '@/data/mockData'
 import trickData from '@/data/videos.json'
@@ -177,10 +178,10 @@ export default function VideoLessonScreen({ youtubeId: propYoutubeId, onNavigate
                 key={rl.youtubeId}
                 className="flex items-center gap-3 p-3 rounded-xl mb-2 cursor-pointer hover:opacity-80 transition-opacity"
                 style={{ background: '#171c24', border: '1px solid #2a3038' }}
-                onClick={() => onNavigate && (window as any).__setYoutubeId?.(rl.youtubeId)}
+                onClick={() => onNavigate && (window as Window & { __setYoutubeId?: (id: string) => void }).__setYoutubeId?.(rl.youtubeId)}
               >
-                <div className="w-14 h-10 rounded-lg overflow-hidden shrink-0">
-                  <img src={rl.thumbnail} alt={rl.trick} className="w-full h-full object-cover" />
+                <div className="relative w-14 h-10 rounded-lg overflow-hidden shrink-0">
+                  <Image src={rl.thumbnail} alt={rl.trick} fill className="object-cover" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-semibold text-white leading-snug truncate">{rl.trick} Tutorial</div>
@@ -202,11 +203,12 @@ export default function VideoLessonScreen({ youtubeId: propYoutubeId, onNavigate
                 className="flex items-center gap-3 p-3 rounded-xl mb-2 cursor-pointer hover:opacity-80 transition-opacity"
                 style={{ background: '#171c24', border: '1px solid #2a3038' }}
               >
-                <div className="w-14 h-10 rounded-lg overflow-hidden shrink-0">
-                  <img
+                <div className="relative w-14 h-10 rounded-lg overflow-hidden shrink-0">
+                  <Image
                     src={`https://picsum.photos/seed/${rl.thumbnailSeed}/80/56`}
                     alt={rl.title}
-                    className="w-full h-full object-cover"
+                    fill
+                    className="object-cover"
                   />
                 </div>
                 <div className="flex-1 min-w-0">

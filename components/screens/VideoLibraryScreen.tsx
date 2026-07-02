@@ -58,25 +58,27 @@ interface Props { onSelectVideo?: (youtubeId: string) => void }
 export default function VideoLibraryScreen({ onSelectVideo }: Props) {
   const [activeTab, setActiveTab]       = useState<Tab>('All Tricks')
   const [query, setQuery]               = useState('')
-  const [playlistItems, setPlaylistItems] = useState<VideoCardItem[]>([])
-  const [loading, setLoading]           = useState(false)
-  const [apiError, setApiError]         = useState(false)
+  const [fetchState, setFetchState] = useState<{
+    tab: Tab | null; items: VideoCardItem[]; error: boolean
+  }>({ tab: null, items: [], error: false })
+
+  // Derive loading/error/items from fetchState so no synchronous setState in effect body
+  const loading     = activeTab !== 'All Tricks' && fetchState.tab !== activeTab && !fetchState.error
+  const apiError    = fetchState.tab === activeTab && fetchState.error
+  const playlistItems = fetchState.tab === activeTab ? fetchState.items : []
 
   // Fetch YouTube playlist when a level tab is selected
   useEffect(() => {
     if (activeTab === 'All Tricks') return
     const playlistId = PLAYLIST_IDS[activeTab]
     if (!playlistId) return
-
-    setLoading(true)
-    setApiError(false)
-    setPlaylistItems([])
+    let cancelled = false
 
     fetchPlaylistVideos(playlistId).then(items => {
-      if (items.length === 0) {
-        setApiError(true)
-      } else {
-        setPlaylistItems(items.map((item, i) => ({
+      if (cancelled) return
+      setFetchState({
+        tab: activeTab,
+        items: items.length === 0 ? [] : items.map((item, i) => ({
           id:              `yt-${i}`,
           title:           item.title,
           thumbnail:       item.thumbnail,
@@ -86,10 +88,11 @@ export default function VideoLibraryScreen({ onSelectVideo }: Props) {
           durationSeconds: 0,
           views:           0,
           postedAt:        item.publishedAt,
-        })))
-      }
-      setLoading(false)
+        })),
+        error: items.length === 0,
+      })
     })
+    return () => { cancelled = true }
   }, [activeTab])
 
   // Filter all-tricks by search query

@@ -80,7 +80,7 @@ export function scoreDoubleLift(
     }
   }
 
-  const [, ic, mc, rc, pc] = metrics.fingerCurl
+  const [, ic, mc, rc] = metrics.fingerCurl
   const avgMainCurl = (ic + mc + rc) / 3
   const feedback: ScoreBreakdown['fingerFeedback'] = {}
   let score = 0

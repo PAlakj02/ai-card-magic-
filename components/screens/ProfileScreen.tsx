@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { Gem, LogOut, Loader2 } from 'lucide-react'
 import BadgeIcon from '@/components/ui/BadgeIcon'
-import ProgressRing from '@/components/ui/ProgressRing'
 import { heatmapData } from '@/data/mockData'
 import { useAuth } from '@/context/AuthContext'
 import { signOut, fetchRecentScores, ALL_BADGES, type AssessmentScore } from '@/lib/authActions'
@@ -22,13 +22,14 @@ function formatDate(ts: { toDate: () => Date }): string {
 export default function ProfileScreen() {
   const { userData, firebaseUser } = useAuth()
   const [recentScores, setRecentScores] = useState<AssessmentScore[]>([])
-  const [scoresLoading, setScoresLoading] = useState(true)
+  const [scoresDone, setScoresDone]     = useState(false)
+  const scoresLoading = !!firebaseUser && !scoresDone
 
   useEffect(() => {
-    if (!firebaseUser) { setScoresLoading(false); return }
+    if (!firebaseUser) return
     fetchRecentScores(firebaseUser.uid, 5)
-      .then(s => { setRecentScores(s); setScoresLoading(false) })
-      .catch(() => setScoresLoading(false))
+      .then(s => { setRecentScores(s); setScoresDone(true) })
+      .catch(() => setScoresDone(true))
   }, [firebaseUser])
 
   const displayName = userData?.displayName ?? ''
@@ -72,9 +73,9 @@ export default function ProfileScreen() {
       <div className="rounded-2xl p-6 mb-5 flex items-center gap-6"
         style={{ background: '#171c24', border: '1px solid #2a3038' }}>
         <div className="relative shrink-0">
-          <div className="w-24 h-24 rounded-full overflow-hidden"
+          <div className="relative w-24 h-24 rounded-full overflow-hidden"
             style={{ border: '2px solid #35e98b', boxShadow: '0 0 20px rgba(53,233,139,0.3)' }}>
-            <img src={`https://picsum.photos/seed/${avatarSeed}/96/96`} alt={displayName} className="w-full h-full object-cover" />
+            <Image src={`https://picsum.photos/seed/${avatarSeed}/96/96`} alt={displayName || 'avatar'} fill className="object-cover" />
           </div>
           <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
             style={{ background: 'linear-gradient(135deg,#18e5f0,#b86cff)', border: '2px solid #0d1014' }}>

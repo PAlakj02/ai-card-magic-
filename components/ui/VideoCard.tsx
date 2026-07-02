@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import { Eye, MoreVertical } from 'lucide-react'
 import { formatDuration } from '@/data/mockData'
 
@@ -37,11 +38,13 @@ export default function VideoCard({ video, onClick }: Props) {
     >
       {/* Thumbnail */}
       <div className="relative" style={{ paddingTop: '56.25%' }}>
-        <img
+        <Image
           src={video.thumbnail}
           alt={video.title}
-          className="absolute inset-0 w-full h-full object-cover"
-          onError={e => { (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${video.youtubeId}/hqdefault.jpg` }}
+          fill
+          className="object-cover"
+          sizes="(max-width: 768px) 100vw, 33vw"
+          onError={(e) => { (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${video.youtubeId}/hqdefault.jpg` }}
         />
         {/* Duration */}
         {video.durationSeconds > 0 && (

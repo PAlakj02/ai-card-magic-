@@ -15,6 +15,25 @@ import {
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
+// ── MediaPipe type interfaces ─────────────────────────────────────────────────
+interface MPHandsResults {
+  image: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
+  multiHandLandmarks?: LandmarkPoint[][]
+}
+interface MPHands {
+  setOptions(opts: object): void
+  onResults(cb: (results: MPHandsResults) => void): void
+  send(input: { image: HTMLVideoElement }): Promise<void>
+  close(): void
+}
+type MPConnections = { start: number; end: number }[]
+interface MPHandsModule   { Hands: new (opts: object) => MPHands; HAND_CONNECTIONS: MPConnections }
+interface MPCameraModule  { Camera: new (video: HTMLVideoElement, opts: object) => { start(): void; stop(): void } }
+interface MPDrawingModule {
+  drawConnectors: (ctx: CanvasRenderingContext2D, lm: LandmarkPoint[], c: MPConnections, opts: object) => void
+  drawLandmarks:  (ctx: CanvasRenderingContext2D, lm: LandmarkPoint[], opts: object) => void
+}
+
 // ── Hand tracking hook ────────────────────────────────────────────────────────
 function useHandTracking(
   videoEl: HTMLVideoElement | null,
@@ -29,20 +48,21 @@ function useHandTracking(
 
   useEffect(() => {
     if (!videoEl || !canvasEl) return
+    const video = videoEl  // narrow to non-null for use inside async init()
     let cancelled = false
 
     async function init() {
       try {
-        const { Hands, HAND_CONNECTIONS }        = await import('@mediapipe/hands') as any
-        const { Camera }                          = await import('@mediapipe/camera_utils') as any
-        const { drawConnectors, drawLandmarks }   = await import('@mediapipe/drawing_utils') as any
+        const { Hands, HAND_CONNECTIONS }        = await import('@mediapipe/hands') as unknown as MPHandsModule
+        const { Camera }                          = await import('@mediapipe/camera_utils') as unknown as MPCameraModule
+        const { drawConnectors, drawLandmarks }   = await import('@mediapipe/drawing_utils') as unknown as MPDrawingModule
 
         const hands = new Hands({
           locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${f}`,
         })
         hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 })
 
-        hands.onResults((results: any) => {
+        hands.onResults((results: MPHandsResults) => {
           if (cancelled || !canvasEl) return
           const ctx = canvasEl.getContext('2d')!
           ctx.clearRect(0, 0, canvasEl.width, canvasEl.height)
@@ -63,8 +83,8 @@ function useHandTracking(
           }
         })
 
-        const cam = new Camera(videoEl, {
-          onFrame: async () => { if (!cancelled) await hands.send({ image: videoEl }) },
+        const cam = new Camera(video, {
+          onFrame: async () => { if (!cancelled) await hands.send({ image: video }) },
           width: 640, height: 480,
         })
         cam.start()
@@ -618,14 +638,17 @@ function ModuleView({ module, onBack }: ModuleViewProps) {
   )
 
   useEffect(() => {
-    setTasks(prev => {
-      // Union of local state + Firestore — never regress progress
-      const localIds = prev
-        .filter(t => t.status === 'complete')
-        .map(t => `${module.id}-${t.order}`)
-      const merged = [...completedIds, ...localIds.filter(id => !completedIds.includes(id))]
-      return initModuleTasks(module.tasks, module.id, merged)
+    queueMicrotask(() => {
+      setTasks(prev => {
+        // Union of local state + Firestore — never regress progress
+        const localIds = prev
+          .filter(t => t.status === 'complete')
+          .map(t => `${module.id}-${t.order}`)
+        const merged = [...completedIds, ...localIds.filter(id => !completedIds.includes(id))]
+        return initModuleTasks(module.tasks, module.id, merged)
+      })
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userData])
 
   const completedCount = tasks.filter(t => t.status === 'complete').length

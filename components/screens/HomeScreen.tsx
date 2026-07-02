@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 import { Flame, ArrowRight, Loader2 } from 'lucide-react'
 import StatCard from '@/components/ui/StatCard'
 import ProgressRing from '@/components/ui/ProgressRing'
@@ -90,10 +91,11 @@ export default function HomeScreen({ onNavigate }: Props) {
           style={{ background: '#171c24', border: '1px solid #2a3038', minHeight: 240 }}
           onClick={() => onNavigate('video-lesson')}
         >
-          <img
+          <Image
             src={`https://picsum.photos/seed/${featuredCourse.thumbnailSeed}/700/300`}
             alt={featuredCourse.title}
-            className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-50 transition-opacity"
+            fill
+            className="object-cover opacity-40 group-hover:opacity-50 transition-opacity"
           />
           <div className="absolute inset-0 flex flex-col justify-end p-6" style={{ background: 'linear-gradient(to top, rgba(13,16,20,0.95) 0%, transparent 60%)' }}>
             <span

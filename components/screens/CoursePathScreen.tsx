@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 import { CheckCircle2, Circle, Lock } from 'lucide-react'
 import { courseNodes } from '@/data/mockData'
 import { useAuth } from '@/context/AuthContext'
@@ -22,10 +23,10 @@ export default function CoursePathScreen() {
             <div className="font-bold" style={{ color: '#35e98b' }}>{totalXP.toLocaleString()} XP</div>
           </div>
           <div
-            className="w-9 h-9 rounded-full flex items-center justify-center overflow-hidden"
+            className="relative w-9 h-9 rounded-full flex items-center justify-center overflow-hidden"
             style={{ border: '2px solid #35e98b', boxShadow: '0 0 10px rgba(53,233,139,0.35)' }}
           >
-            <img src={`https://picsum.photos/seed/${avatarSeed}/40/40`} alt="avatar" className="w-full h-full object-cover" />
+            <Image src={`https://picsum.photos/seed/${avatarSeed}/40/40`} alt="avatar" fill className="object-cover" />
           </div>
         </div>
       </div>

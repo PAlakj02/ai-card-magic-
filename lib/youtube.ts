@@ -18,23 +18,42 @@ export async function fetchPlaylistVideos(
     `https://www.googleapis.com/youtube/v3/playlistItems` +
     `?part=snippet&playlistId=${playlistId}&maxResults=${maxResults}&key=${apiKey}`
 
+  interface YTItem {
+    snippet?: {
+      resourceId?: { videoId: string }
+      title: string
+      thumbnails?: { maxres?: { url: string }; high?: { url: string } }
+      channelTitle?: string
+      publishedAt: string
+    }
+  }
+  interface ValidYTItem {
+    snippet: {
+      resourceId: { videoId: string }
+      title: string
+      thumbnails?: { maxres?: { url: string }; high?: { url: string } }
+      channelTitle?: string
+      publishedAt: string
+    }
+  }
+
   try {
     const res = await fetch(url)
     if (!res.ok) return []
     const data = await res.json()
 
-    return (data.items ?? [])
-      .filter((item: any) => item.snippet?.resourceId?.videoId)
-      .map((item: any) => {
-        const vid = item.snippet.resourceId.videoId as string
+    return (data.items as YTItem[] ?? [])
+      .filter((item): item is ValidYTItem => !!item.snippet?.resourceId?.videoId)
+      .map((item) => {
+        const vid = item.snippet.resourceId.videoId
         return {
           youtubeId:    vid,
-          title:        item.snippet.title as string,
+          title:        item.snippet.title,
           thumbnail:
             item.snippet.thumbnails?.maxres?.url ??
             item.snippet.thumbnails?.high?.url ??
             `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`,
-          channelTitle: (item.snippet.channelTitle ?? '') as string,
+          channelTitle: item.snippet.channelTitle ?? '',
           publishedAt:  new Date(item.snippet.publishedAt).toLocaleDateString('en-US', {
             month: 'short', day: 'numeric', year: 'numeric',
           }),

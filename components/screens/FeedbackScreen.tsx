@@ -25,15 +25,16 @@ function tierLabel(tier: AssessmentScore['tier']): string {
 
 export default function FeedbackScreen() {
   const { firebaseUser, userData } = useAuth()
-  const [scores, setScores]   = useState<AssessmentScore[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(false)
+  const [scores, setScores] = useState<AssessmentScore[]>([])
+  const [done, setDone]     = useState(false)
+  const [error, setError]   = useState(false)
+  const loading = !!firebaseUser && !done && !error
 
   useEffect(() => {
-    if (!firebaseUser) { setLoading(false); return }
+    if (!firebaseUser) return
     fetchRecentScores(firebaseUser.uid, 5)
-      .then(s => { setScores(s); setLoading(false) })
-      .catch(() => { setError(true); setLoading(false) })
+      .then(s => { setScores(s); setDone(true) })
+      .catch(() => setError(true))
   }, [firebaseUser])
 
   const avgScore = scores.length
