@@ -384,16 +384,6 @@ export const aiReviews: AIReview[] = [
   { id: 3, title: 'Diagonal Palm Shift',  thumbnailSeed: 'rev3', score: 74, grade: 'GOOD',   date: '1 week ago' },
 ]
 
-// ─── Practice heatmap (profile screen) ───────────────────────────────────────
-// 7 cols × 5 rows = 35 cells; intensity 0–4
-export const heatmapData: number[] = [
-  0,1,0,2,1,0,0,
-  1,2,3,1,0,1,2,
-  2,3,4,3,2,1,0,
-  1,2,3,4,3,2,1,
-  0,1,2,3,2,4,3,
-]
-
 // helper
 export function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60)

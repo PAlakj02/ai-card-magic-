@@ -3,9 +3,8 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { Gem, LogOut, Loader2 } from 'lucide-react'
 import BadgeIcon from '@/components/ui/BadgeIcon'
-import { heatmapData } from '@/data/mockData'
 import { useAuth } from '@/context/AuthContext'
-import { signOut, fetchRecentScores, ALL_BADGES, type AssessmentScore } from '@/lib/authActions'
+import { signOut, fetchRecentScores, fetchPracticeHeatmap, ALL_BADGES, type AssessmentScore } from '@/lib/authActions'
 import { xpProgress, rankTitle, MAX_LEVEL } from '@/lib/xp'
 
 // empty / low / medium / high — dark-theme-consistent, no bright/random greens
@@ -26,11 +25,16 @@ export default function ProfileScreen() {
   const [scoresDone, setScoresDone]     = useState(false)
   const scoresLoading = !!firebaseUser && !scoresDone
 
+  const [heatmap, setHeatmap] = useState<number[] | null>(null)
+
   useEffect(() => {
     if (!firebaseUser) return
     fetchRecentScores(firebaseUser.uid, 5)
       .then(s => { setRecentScores(s); setScoresDone(true) })
       .catch(() => setScoresDone(true))
+    fetchPracticeHeatmap(firebaseUser.uid, 35)
+      .then(setHeatmap)
+      .catch(() => setHeatmap(Array(35).fill(0)))
   }, [firebaseUser])
 
   const displayName = userData?.displayName ?? ''
@@ -171,21 +175,30 @@ export default function ProfileScreen() {
             )}
           </div>
 
-          {/* Heatmap */}
+          {/* Heatmap — real practice-attempt counts per day, not mock data */}
           <div className="rounded-2xl p-5" style={{ background: '#171c24', border: '1px solid #2a3038' }}>
             <div className="text-sm font-semibold text-white mb-4">Practice Intensity</div>
-            <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
-              {heatmapData.map((v, i) => (
-                <div key={i} className="rounded aspect-square"
-                  style={{ background: heatColors[Math.min(v, heatColors.length - 1)] }} title={`Intensity: ${v}`} />
-              ))}
-            </div>
-            <div className="flex items-center justify-end gap-2 mt-3">
-              {heatColors.map((c, i) => (
-                <div key={i} className="w-3 h-3 rounded-sm" style={{ background: c, border: '1px solid #2a3038' }} />
-              ))}
-              <span className="text-[10px]" style={{ color: '#6b7280' }}>more</span>
-            </div>
+            {heatmap === null ? (
+              <div className="flex items-center justify-center h-24 gap-2" style={{ color: '#18e5f0' }}>
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-xs">Loading…</span>
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
+                  {heatmap.map((v, i) => (
+                    <div key={i} className="rounded aspect-square"
+                      style={{ background: heatColors[Math.min(v, heatColors.length - 1)] }} title={`Intensity: ${v}`} />
+                  ))}
+                </div>
+                <div className="flex items-center justify-end gap-2 mt-3">
+                  {heatColors.map((c, i) => (
+                    <div key={i} className="w-3 h-3 rounded-sm" style={{ background: c, border: '1px solid #2a3038' }} />
+                  ))}
+                  <span className="text-[10px]" style={{ color: '#6b7280' }}>more</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
