@@ -3,9 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, Lock, PlayCircle, Camera, Check, RefreshCw, ChevronLeft, VideoOff, AlertCircle, Square } from 'lucide-react'
 import { practiceModules } from '@/data/mockData'
 import type { PracticeModuleData, Task } from '@/data/mockData'
-import { scoreMovement } from '@/lib/scoreMovement'
 import type { LandmarkPoint } from '@/lib/scoreMovement'
-import { scoreSession } from '@/lib/keypointSimilarity'
+import { scoreSession, scoreLiveFrame } from '@/lib/keypointSimilarity'
 import type { ScoreBreakdown } from '@/lib/handScoring'
 import { saveSession } from '@/lib/sessions'
 import type { SessionFrame } from '@/lib/sessions'
@@ -47,6 +46,7 @@ function useHandTracking(
   videoEl: HTMLVideoElement | null,
   canvasEl: HTMLCanvasElement | null,
   onLandmarksRef: React.MutableRefObject<((hands: LandmarkPoint[][]) => void) | null>,
+  referenceKeypoints: LandmarkPoint[] | null,
 ) {
   const [accuracy, setAccuracy]         = useState(0)
   const [feedback, setFeedback]         = useState('Initializing hand tracking…')
@@ -55,6 +55,10 @@ function useHandTracking(
   const [handDetected, setHandDetected] = useState(false)
   const cleanupRef      = useRef<() => void>(() => {})
   const handLostTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Ref (not a hook dependency) so a late-arriving reference doc doesn't tear down and
+  // reinitialize the whole camera/MediaPipe pipeline — onResults always reads the latest.
+  const referenceKeypointsRef = useRef(referenceKeypoints)
+  useEffect(() => { referenceKeypointsRef.current = referenceKeypoints }, [referenceKeypoints])
 
   useEffect(() => {
     if (!videoEl || !canvasEl) return
@@ -91,8 +95,11 @@ function useHandTracking(
               drawLandmarks(ctx, lm, { color: '#35e98b', lineWidth: 1, radius: 4 })
             }
             setHandDetected(true)
-            onLandmarksRef.current?.(results.multiHandLandmarks as LandmarkPoint[][])
-            const result = scoreMovement(results.multiHandLandmarks)
+            const hands = results.multiHandLandmarks as LandmarkPoint[][]
+            onLandmarksRef.current?.(hands)
+            // Same handSimilarity() math as the final scoreSession() — the live badge
+            // and the end-of-assessment score must never be able to disagree.
+            const result = scoreLiveFrame(hands, referenceKeypointsRef.current)
             setAccuracy(result.accuracy)
             setFeedback(result.feedback)
           } else if (!handLostTimerRef.current) {
@@ -140,10 +147,11 @@ interface CameraPanelProps {
   framesCaptured:     number
   targetFrames:       number
   showMoveCloserHint: boolean
+  referenceKeypoints: LandmarkPoint[] | null
   onReadyChange?:     (ready: boolean) => void
 }
 
-function CameraPanel({ onLandmarksRef, captureMode, framesCaptured, targetFrames, showMoveCloserHint, onReadyChange }: CameraPanelProps) {
+function CameraPanel({ onLandmarksRef, captureMode, framesCaptured, targetFrames, showMoveCloserHint, referenceKeypoints, onReadyChange }: CameraPanelProps) {
   const videoRef  = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [vidEl, setVidEl]       = useState<HTMLVideoElement | null>(null)
@@ -152,7 +160,7 @@ function CameraPanel({ onLandmarksRef, captureMode, framesCaptured, targetFrames
   useEffect(() => { setVidEl(videoRef.current) }, [])
   useEffect(() => { setCanvasEl(canvasRef.current) }, [])
 
-  const { accuracy, feedback, ready, camError, handDetected } = useHandTracking(vidEl, canvasEl, onLandmarksRef)
+  const { accuracy, feedback, ready, camError, handDetected } = useHandTracking(vidEl, canvasEl, onLandmarksRef, referenceKeypoints)
 
   useEffect(() => { onReadyChange?.(ready) }, [ready, onReadyChange])
 
@@ -384,6 +392,7 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
   type Phase = 'watching' | 'capturing' | 'result'
   const [phase, setPhase]               = useState<Phase>('watching')
   const [cameraReady, setCameraReady]   = useState(false)
+  const [reference, setReference]       = useState<Record<string, unknown> | null>(null)
   const [framesCaptured, setFramesCaptured]     = useState(0)
   const [showMoveCloserHint, setShowMoveCloserHint] = useState(false)
   const [scoreResult, setScoreResult]   = useState<ScoreBreakdown | null>(null)
@@ -391,6 +400,20 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
   const [newBadgeIds, setNewBadgeIds]   = useState<string[]>([])
   const [busy, setBusy]                 = useState(false)
   const [assessmentError, setAssessmentError] = useState('')
+
+  // Fetched once, as soon as this task exists (alongside the camera preload) — reused for
+  // both the live preview badge and the final score, so they can never disagree, and so
+  // finishCapture() doesn't need a second Firestore round-trip.
+  const referenceKeypoints = (reference?.referenceKeypoints as LandmarkPoint[] | undefined) ?? null
+
+  useEffect(() => {
+    if (!hasCam || isComplete) return
+    let cancelled = false
+    getDoc(doc(db, 'references', trickName)).then(snap => {
+      if (!cancelled) setReference(snap.exists() ? (snap.data() as Record<string, unknown>) : null)
+    })
+    return () => { cancelled = true }
+  }, [hasCam, isComplete, trickName])
 
   const frameBufferRef  = useRef<SessionFrame[]>([])
   const captureStartRef = useRef(0)
@@ -435,11 +458,14 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
 
     setBusy(true)
     try {
-      const refSnap   = await getDoc(doc(db, 'references', trickName))
-      const reference = refSnap.exists() ? (refSnap.data() as Record<string, unknown>) : null
+      // Reference was already fetched when this task mounted (shared with the live preview
+      // badge) — fall back to a fresh fetch only if that somehow hasn't resolved yet.
+      const resolvedReference = reference ?? await getDoc(doc(db, 'references', trickName))
+        .then(snap => (snap.exists() ? (snap.data() as Record<string, unknown>) : null))
+        .catch(() => null)
 
       const capturedFrames = frameBufferRef.current
-      const result = scoreSession(capturedFrames.map(f => f.hands), reference)
+      const result = scoreSession(capturedFrames.map(f => f.hands), resolvedReference)
       const xp     = result.tier === 'excellent' ? 100 : result.tier === 'good' ? 50 : 25
       setXpAwarded(xp)
 
@@ -568,6 +594,7 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
               framesCaptured={framesCaptured}
               targetFrames={TARGET_FRAMES}
               showMoveCloserHint={showMoveCloserHint}
+              referenceKeypoints={referenceKeypoints}
               onReadyChange={setCameraReady}
             />
           </div>

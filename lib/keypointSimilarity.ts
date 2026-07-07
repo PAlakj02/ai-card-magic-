@@ -72,6 +72,46 @@ const FEEDBACK_HINTS: Record<FingerName, string> = {
   pinky:  'Your pinky position (often the break point) differs most from the reference.',
 }
 
+export interface LiveFrameScore {
+  accuracy: number // 0-100
+  feedback: string
+}
+
+/**
+ * Real-time per-frame score for the live camera preview badge — uses the exact same
+ * handSimilarity()/perFingerDistance() math as scoreSession() below, just applied to a
+ * single frame instead of an average across a capture. Deliberately NOT a separate mock:
+ * showing the user a different number live than what the final assessment computes is
+ * actively misleading (e.g. a live "80% Accuracy" badge next to a final 0/100 result).
+ */
+export function scoreLiveFrame(
+  hands: LandmarkPoint[][],
+  referenceKeypoints: LandmarkPoint[] | null,
+): LiveFrameScore {
+  if (!referenceKeypoints) return { accuracy: 0, feedback: 'Loading reference…' }
+  if (hands.length === 0) return { accuracy: 0, feedback: 'Show your hand to the camera…' }
+
+  let bestSim = -1
+  let bestDists: Record<FingerName, number> | null = null
+  for (const hand of hands) {
+    const sim = handSimilarity(hand, referenceKeypoints)
+    if (sim > bestSim) {
+      bestSim = sim
+      bestDists = perFingerDistance(hand, referenceKeypoints)
+    }
+  }
+
+  const accuracy = Math.round(Math.max(0, Math.min(100, bestSim * 100)))
+  if (accuracy >= 75) {
+    return { accuracy, feedback: 'Great technique! Your grip matches the reference closely.' }
+  }
+  if (bestDists) {
+    const [worstFinger] = (Object.entries(bestDists) as [FingerName, number][]).sort((a, b) => b[1] - a[1])[0]
+    return { accuracy, feedback: FEEDBACK_HINTS[worstFinger] }
+  }
+  return { accuracy, feedback: 'Keep adjusting your grip.' }
+}
+
 const MIN_FRAMES = 10 // average across at least this many hand-present frames, never a single capture
 
 /**
