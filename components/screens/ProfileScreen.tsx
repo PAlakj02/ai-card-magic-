@@ -8,7 +8,8 @@ import { useAuth } from '@/context/AuthContext'
 import { signOut, fetchRecentScores, ALL_BADGES, type AssessmentScore } from '@/lib/authActions'
 import { xpProgress, rankTitle, MAX_LEVEL } from '@/lib/xp'
 
-const heatColors = ['#171c24', '#1a3a2a', '#1e5236', '#22c55e40', '#35e98b']
+// empty / low / medium / high — dark-theme-consistent, no bright/random greens
+const heatColors = ['#1a2030', '#1a3a2a', '#1d6b3f', '#35e98b']
 
 function formatDate(ts: { toDate: () => Date }): string {
   const d    = ts.toDate()
@@ -176,7 +177,7 @@ export default function ProfileScreen() {
             <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
               {heatmapData.map((v, i) => (
                 <div key={i} className="rounded aspect-square"
-                  style={{ background: heatColors[Math.min(v, 4)] }} title={`Intensity: ${v}`} />
+                  style={{ background: heatColors[Math.min(v, heatColors.length - 1)] }} title={`Intensity: ${v}`} />
               ))}
             </div>
             <div className="flex items-center justify-end gap-2 mt-3">

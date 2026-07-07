@@ -17,7 +17,10 @@ import {
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
-const SAMPLE_INTERVAL_MS = 100 // throttle stored keypoint frames to ~10fps
+const SAMPLE_INTERVAL_MS = 100    // throttle stored keypoint frames to ~10fps
+const TARGET_FRAMES      = 15     // auto-finish once we have this many hand-present frames to average
+const NO_HAND_HINT_MS    = 5000   // show "move closer" hint if no hand seen at all after this long
+const MAX_CAPTURE_MS     = 15000  // safety cap so an assessment can never hang forever
 
 // ── MediaPipe type interfaces ─────────────────────────────────────────────────
 interface MPHandsResults {
@@ -44,10 +47,11 @@ function useHandTracking(
   canvasEl: HTMLCanvasElement | null,
   onLandmarksRef: React.MutableRefObject<((hands: LandmarkPoint[][]) => void) | null>,
 ) {
-  const [accuracy, setAccuracy] = useState(0)
-  const [feedback, setFeedback] = useState('Initializing hand tracking…')
-  const [ready, setReady]       = useState(false)
-  const [camError, setCamError] = useState(false)
+  const [accuracy, setAccuracy]         = useState(0)
+  const [feedback, setFeedback]         = useState('Initializing hand tracking…')
+  const [ready, setReady]               = useState(false)
+  const [camError, setCamError]         = useState(false)
+  const [handDetected, setHandDetected] = useState(false)
   const cleanupRef = useRef<() => void>(() => {})
 
   useEffect(() => {
@@ -64,7 +68,9 @@ function useHandTracking(
         const hands = new Hands({
           locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${f}`,
         })
-        hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 })
+        // modelComplexity 1 (fuller, more accurate model) + a lower detection threshold
+        // trade a little CPU for much faster, more reliable hand acquisition.
+        hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 })
 
         hands.onResults((results: MPHandsResults) => {
           if (cancelled || !canvasEl) return
@@ -76,11 +82,13 @@ function useHandTracking(
               drawConnectors(ctx, lm, HAND_CONNECTIONS, { color: '#18e5f0', lineWidth: 2 })
               drawLandmarks(ctx, lm, { color: '#35e98b', lineWidth: 1, radius: 4 })
             }
+            setHandDetected(true)
             onLandmarksRef.current?.(results.multiHandLandmarks as LandmarkPoint[][])
             const result = scoreMovement(results.multiHandLandmarks)
             setAccuracy(result.accuracy)
             setFeedback(result.feedback)
           } else {
+            setHandDetected(false)
             setFeedback('Show your hand to the camera…')
             setAccuracy(0)
           }
@@ -105,17 +113,19 @@ function useHandTracking(
     return () => { cancelled = true; cleanupRef.current() }
   }, [videoEl, canvasEl])
 
-  return { accuracy, feedback, ready, camError }
+  return { accuracy, feedback, ready, camError, handDetected }
 }
 
 // ── Camera Panel ──────────────────────────────────────────────────────────────
 interface CameraPanelProps {
-  onLandmarksRef: React.MutableRefObject<((hands: LandmarkPoint[][]) => void) | null>
-  captureMode:   boolean
-  countdown:     number
+  onLandmarksRef:     React.MutableRefObject<((hands: LandmarkPoint[][]) => void) | null>
+  captureMode:        boolean
+  framesCaptured:     number
+  targetFrames:       number
+  showMoveCloserHint: boolean
 }
 
-function CameraPanel({ onLandmarksRef, captureMode, countdown }: CameraPanelProps) {
+function CameraPanel({ onLandmarksRef, captureMode, framesCaptured, targetFrames, showMoveCloserHint }: CameraPanelProps) {
   const videoRef  = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [vidEl, setVidEl]       = useState<HTMLVideoElement | null>(null)
@@ -124,7 +134,7 @@ function CameraPanel({ onLandmarksRef, captureMode, countdown }: CameraPanelProp
   useEffect(() => { setVidEl(videoRef.current) }, [])
   useEffect(() => { setCanvasEl(canvasRef.current) }, [])
 
-  const { accuracy, feedback, ready, camError } = useHandTracking(vidEl, canvasEl, onLandmarksRef)
+  const { accuracy, feedback, ready, camError, handDetected } = useHandTracking(vidEl, canvasEl, onLandmarksRef)
 
   if (camError) {
     return (
@@ -150,12 +160,25 @@ function CameraPanel({ onLandmarksRef, captureMode, countdown }: CameraPanelProp
     )
   }
 
+  // Green means "we can see your hand and are recording it" — the clear visual cue
+  // that tracking is actually active, instead of a blind countdown.
+  const liveColor  = captureMode ? (handDetected ? '#35e98b' : '#18e5f0') : '#2a3038'
+  const borderGlow = captureMode ? (handDetected ? '#35e98b80' : '#18e5f080') : '#18e5f080'
+
+  const statusText = !ready
+    ? 'Starting camera…'
+    : !captureMode
+      ? feedback
+      : !handDetected
+        ? (showMoveCloserHint ? 'Move your hand closer to camera' : 'Show your hand to the camera…')
+        : `Capturing your hand position… (${Math.min(framesCaptured, targetFrames)}/${targetFrames})`
+
   return (
     <div
       className="rounded-2xl overflow-hidden relative"
       style={{
         background:    '#0d1014',
-        border:        `1px solid ${captureMode ? '#18e5f0' : '#2a3038'}`,
+        border:        `1px solid ${liveColor}`,
         aspectRatio:   '4/3',
         transition:    'border-color 0.3s',
       }}
@@ -167,24 +190,24 @@ function CameraPanel({ onLandmarksRef, captureMode, countdown }: CameraPanelProp
         {(['tl','tr','bl','br'] as const).map(c => (
           <div key={c} className={`absolute w-6 h-6 ${c[0]==='t'?'top-3':'bottom-3'} ${c[1]==='l'?'left-3':'right-3'}`}
             style={{
-              borderTop:    c[0]==='t' ? `2px solid ${captureMode?'#18e5f0':'#18e5f080'}` : undefined,
-              borderBottom: c[0]==='b' ? `2px solid ${captureMode?'#18e5f0':'#18e5f080'}` : undefined,
-              borderLeft:   c[1]==='l' ? `2px solid ${captureMode?'#18e5f0':'#18e5f080'}` : undefined,
-              borderRight:  c[1]==='r' ? `2px solid ${captureMode?'#18e5f0':'#18e5f080'}` : undefined,
+              borderTop:    c[0]==='t' ? `2px solid ${captureMode ? liveColor : borderGlow}` : undefined,
+              borderBottom: c[0]==='b' ? `2px solid ${captureMode ? liveColor : borderGlow}` : undefined,
+              borderLeft:   c[1]==='l' ? `2px solid ${captureMode ? liveColor : borderGlow}` : undefined,
+              borderRight:  c[1]==='r' ? `2px solid ${captureMode ? liveColor : borderGlow}` : undefined,
+              transition:   'border-color 0.3s',
             }}
           />
         ))}
 
         {captureMode && (
-          <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(13,16,20,0.55)' }}>
-            <div className="text-center">
-              <div className="text-7xl font-black mb-2" style={{ color: 'white', textShadow: '0 0 40px #18e5f0' }}>
-                {countdown}
-              </div>
-              <div className="text-sm font-semibold tracking-wider" style={{ color: '#18e5f0' }}>
-                HOLD YOUR POSITION
-              </div>
-            </div>
+          <div className="absolute top-4 right-10 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5"
+            style={{
+              background: 'rgba(13,16,20,0.85)',
+              border:     `1px solid ${handDetected ? '#35e98b' : '#6b7280'}`,
+              color:      handDetected ? '#35e98b' : '#9ca3af',
+            }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: handDetected ? '#35e98b' : '#6b7280' }} />
+            {handDetected ? 'Hand Detected' : 'Searching…'}
           </div>
         )}
 
@@ -196,10 +219,16 @@ function CameraPanel({ onLandmarksRef, captureMode, countdown }: CameraPanelProp
         )}
 
         <div className="absolute bottom-0 left-0 right-0 px-4 py-3 text-xs font-medium"
-          style={{ background: 'linear-gradient(transparent, rgba(13,16,20,0.9))', color: ready ? '#18e5f0' : '#6b7280' }}>
-          {ready
-            ? <><Camera size={12} className="inline mr-1.5" />{captureMode ? 'Capturing your hand position…' : feedback}</>
-            : 'Starting camera…'}
+          style={{ background: 'linear-gradient(transparent, rgba(13,16,20,0.9))', color: ready ? liveColor : '#6b7280' }}>
+          <Camera size={12} className="inline mr-1.5" />{statusText}
+          {captureMode && handDetected && (
+            <div className="mt-1.5 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }}>
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${Math.min(100, (framesCaptured / targetFrames) * 100)}%`, background: '#35e98b' }}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -322,7 +351,8 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
 
   type Phase = 'watching' | 'capturing' | 'result'
   const [phase, setPhase]               = useState<Phase>('watching')
-  const [countdown, setCountdown]       = useState(3)
+  const [framesCaptured, setFramesCaptured]     = useState(0)
+  const [showMoveCloserHint, setShowMoveCloserHint] = useState(false)
   const [scoreResult, setScoreResult]   = useState<ScoreBreakdown | null>(null)
   const [xpAwarded, setXpAwarded]       = useState(0)
   const [newBadgeIds, setNewBadgeIds]   = useState<string[]>([])
@@ -333,38 +363,42 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
   const captureStartRef = useRef(0)
   const lastSampleRef   = useRef(0)
   const cancelRef       = useRef(false)
+  const finishingRef    = useRef(false)
+  const noHandTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const maxCapTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onLandmarksRef  = useRef<((hands: LandmarkPoint[][]) => void) | null>(null)
+
+  function clearCaptureTimers() {
+    if (noHandTimerRef.current) clearTimeout(noHandTimerRef.current)
+    if (maxCapTimerRef.current) clearTimeout(maxCapTimerRef.current)
+    noHandTimerRef.current = null
+    maxCapTimerRef.current = null
+  }
+
+  useEffect(() => clearCaptureTimers, [])
 
   useEffect(() => {
     if (phase === 'capturing') {
       onLandmarksRef.current = (hands) => {
+        if (hands.length === 0) return
+        setShowMoveCloserHint(false)
         const now = Date.now()
         if (now - lastSampleRef.current < SAMPLE_INTERVAL_MS) return
         lastSampleRef.current = now
         frameBufferRef.current.push({ t: now - captureStartRef.current, hands })
+        setFramesCaptured(frameBufferRef.current.length)
+        if (frameBufferRef.current.length >= TARGET_FRAMES) finishCapture()
       }
     } else {
       onLandmarksRef.current = null
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
-  async function startAssessment() {
-    cancelRef.current = false
-    frameBufferRef.current = []
-    captureStartRef.current = Date.now()
-    lastSampleRef.current = 0
-    setScoreResult(null)
-    setNewBadgeIds([])
-    setAssessmentError('')
-    setPhase('capturing')
-
-    for (let t = 3; t >= 1; t--) {
-      if (cancelRef.current) return
-      setCountdown(t)
-      await new Promise(r => setTimeout(r, 1000))
-    }
-    if (cancelRef.current) return
-    setCountdown(0)
+  async function finishCapture() {
+    if (finishingRef.current || cancelRef.current) return
+    finishingRef.current = true
+    clearCaptureTimers()
 
     setBusy(true)
     try {
@@ -417,9 +451,31 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
     }
   }
 
+  function startAssessment() {
+    cancelRef.current = false
+    finishingRef.current = false
+    frameBufferRef.current = []
+    captureStartRef.current = Date.now()
+    lastSampleRef.current = 0
+    setFramesCaptured(0)
+    setShowMoveCloserHint(false)
+    setScoreResult(null)
+    setNewBadgeIds([])
+    setAssessmentError('')
+    setPhase('capturing')
+
+    noHandTimerRef.current = setTimeout(() => {
+      if (!cancelRef.current && frameBufferRef.current.length === 0) setShowMoveCloserHint(true)
+    }, NO_HAND_HINT_MS)
+
+    // Safety net: finish with whatever we have (scoreSession handles too-few-frames gracefully)
+    // rather than letting an assessment hang forever if tracking never stabilizes.
+    maxCapTimerRef.current = setTimeout(() => { finishCapture() }, MAX_CAPTURE_MS)
+  }
+
   function stopAssessment() {
     cancelRef.current = true
-    setCountdown(3)
+    clearCaptureTimers()
     setPhase('watching')
   }
 
@@ -466,7 +522,9 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
                 <CameraPanel
                   onLandmarksRef={onLandmarksRef}
                   captureMode={phase === 'capturing'}
-                  countdown={countdown}
+                  framesCaptured={framesCaptured}
+                  targetFrames={TARGET_FRAMES}
+                  showMoveCloserHint={showMoveCloserHint}
                 />
 
                 {phase === 'watching' && (
@@ -475,7 +533,7 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
                     className="mt-4 flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90"
                     style={{ background: 'linear-gradient(135deg,#18e5f0,#b86cff)', color: 'white' }}
                   >
-                    <Camera size={15} /> Start 3-Second Assessment
+                    <Camera size={15} /> Start Assessment
                   </button>
                 )}
 

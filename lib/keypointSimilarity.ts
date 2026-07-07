@@ -72,7 +72,7 @@ const FEEDBACK_HINTS: Record<FingerName, string> = {
   pinky:  'Your pinky position (often the break point) differs most from the reference.',
 }
 
-const MIN_FRAMES = 5
+const MIN_FRAMES = 10 // average across at least this many hand-present frames, never a single capture
 
 /**
  * Scores a full capture (one entry per sampled frame, each frame an array of detected
