@@ -411,12 +411,19 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
       setXpAwarded(xp)
 
       if (firebaseUser) {
-        await saveSession(firebaseUser.uid, {
-          trickName,
-          frames: capturedFrames,
-          score:  result.score,
-          tier:   result.tier,
-        })
+        // Raw keypoint frames are telemetry, not user-facing — don't let a failure
+        // here (or a doc-size edge case) block the score/XP writes that matter.
+        try {
+          await saveSession(firebaseUser.uid, {
+            trickName,
+            frames: capturedFrames,
+            score:  result.score,
+            tier:   result.tier,
+          })
+        } catch (sessionErr) {
+          console.error('[Practice] Failed to save session keypoints (non-fatal):', sessionErr)
+        }
+
         await saveAssessmentScore(firebaseUser.uid, {
           trickName,
           score:    result.score,
@@ -443,8 +450,10 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
       }
 
       setScoreResult(result)
-    } catch {
-      setAssessmentError('Failed to save your score. Check your connection and try again.')
+    } catch (err) {
+      console.error('[Practice] Failed to save assessment score/XP:', err)
+      const detail = err instanceof Error ? ` (${err.message})` : ''
+      setAssessmentError(`Failed to save your score. Check your connection and try again.${detail}`)
     } finally {
       setBusy(false)
       setPhase('result')
