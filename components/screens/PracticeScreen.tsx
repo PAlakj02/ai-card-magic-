@@ -21,6 +21,7 @@ const SAMPLE_INTERVAL_MS = 100    // throttle stored keypoint frames to ~10fps
 const TARGET_FRAMES      = 15     // auto-finish once we have this many hand-present frames to average
 const NO_HAND_HINT_MS    = 5000   // show "move closer" hint if no hand seen at all after this long
 const MAX_CAPTURE_MS     = 15000  // safety cap so an assessment can never hang forever
+const HAND_LOST_GRACE_MS = 2000   // ignore brief dropouts — only treat the hand as "lost" after this long
 
 // ── MediaPipe type interfaces ─────────────────────────────────────────────────
 interface MPHandsResults {
@@ -52,7 +53,8 @@ function useHandTracking(
   const [ready, setReady]               = useState(false)
   const [camError, setCamError]         = useState(false)
   const [handDetected, setHandDetected] = useState(false)
-  const cleanupRef = useRef<() => void>(() => {})
+  const cleanupRef      = useRef<() => void>(() => {})
+  const handLostTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!videoEl || !canvasEl) return
@@ -68,9 +70,9 @@ function useHandTracking(
         const hands = new Hands({
           locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${f}`,
         })
-        // modelComplexity 1 (fuller, more accurate model) + a lower detection threshold
-        // trade a little CPU for much faster, more reliable hand acquisition.
-        hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 })
+        // modelComplexity 0 (the "lite" model) + low confidence thresholds trade a little
+        // accuracy for much faster, more responsive real-time detection.
+        hands.setOptions({ maxNumHands: 2, modelComplexity: 0, minDetectionConfidence: 0.4, minTrackingConfidence: 0.3 })
 
         hands.onResults((results: MPHandsResults) => {
           if (cancelled || !canvasEl) return
@@ -78,6 +80,12 @@ function useHandTracking(
           ctx.clearRect(0, 0, canvasEl.width, canvasEl.height)
           ctx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height)
           if (results.multiHandLandmarks?.length) {
+            // Hand seen this frame — cancel any pending "lost" reset so brief dropouts
+            // (motion blur, a frame at the edge of the model's confidence) don't flicker.
+            if (handLostTimerRef.current) {
+              clearTimeout(handLostTimerRef.current)
+              handLostTimerRef.current = null
+            }
             for (const lm of results.multiHandLandmarks) {
               drawConnectors(ctx, lm, HAND_CONNECTIONS, { color: '#18e5f0', lineWidth: 2 })
               drawLandmarks(ctx, lm, { color: '#35e98b', lineWidth: 1, radius: 4 })
@@ -87,10 +95,15 @@ function useHandTracking(
             const result = scoreMovement(results.multiHandLandmarks)
             setAccuracy(result.accuracy)
             setFeedback(result.feedback)
-          } else {
-            setHandDetected(false)
-            setFeedback('Show your hand to the camera…')
-            setAccuracy(0)
+          } else if (!handLostTimerRef.current) {
+            // Don't reset immediately — only treat the hand as truly gone after it's
+            // been missing continuously for HAND_LOST_GRACE_MS.
+            handLostTimerRef.current = setTimeout(() => {
+              handLostTimerRef.current = null
+              setHandDetected(false)
+              setFeedback('Show your hand to the camera…')
+              setAccuracy(0)
+            }, HAND_LOST_GRACE_MS)
           }
         })
 
@@ -110,7 +123,11 @@ function useHandTracking(
     }
 
     init()
-    return () => { cancelled = true; cleanupRef.current() }
+    return () => {
+      cancelled = true
+      cleanupRef.current()
+      if (handLostTimerRef.current) clearTimeout(handLostTimerRef.current)
+    }
   }, [videoEl, canvasEl])
 
   return { accuracy, feedback, ready, camError, handDetected }
@@ -123,9 +140,10 @@ interface CameraPanelProps {
   framesCaptured:     number
   targetFrames:       number
   showMoveCloserHint: boolean
+  onReadyChange?:     (ready: boolean) => void
 }
 
-function CameraPanel({ onLandmarksRef, captureMode, framesCaptured, targetFrames, showMoveCloserHint }: CameraPanelProps) {
+function CameraPanel({ onLandmarksRef, captureMode, framesCaptured, targetFrames, showMoveCloserHint, onReadyChange }: CameraPanelProps) {
   const videoRef  = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [vidEl, setVidEl]       = useState<HTMLVideoElement | null>(null)
@@ -135,6 +153,8 @@ function CameraPanel({ onLandmarksRef, captureMode, framesCaptured, targetFrames
   useEffect(() => { setCanvasEl(canvasRef.current) }, [])
 
   const { accuracy, feedback, ready, camError, handDetected } = useHandTracking(vidEl, canvasEl, onLandmarksRef)
+
+  useEffect(() => { onReadyChange?.(ready) }, [ready, onReadyChange])
 
   if (camError) {
     return (
@@ -198,6 +218,18 @@ function CameraPanel({ onLandmarksRef, captureMode, framesCaptured, targetFrames
             }}
           />
         ))}
+
+        {!ready && (
+          <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(13,16,20,0.75)' }}>
+            <div className="flex flex-col items-center gap-3 text-center px-6">
+              <div className="w-7 h-7 rounded-full border-2 border-transparent animate-spin" style={{ borderTopColor: '#18e5f0' }} />
+              <div>
+                <div className="text-sm font-semibold text-white">Loading hand-tracking model…</div>
+                <div className="text-xs mt-1" style={{ color: '#9ca3af' }}>Wait for this to finish before showing your hand.</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {captureMode && (
           <div className="absolute top-4 right-10 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5"
@@ -351,6 +383,7 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
 
   type Phase = 'watching' | 'capturing' | 'result'
   const [phase, setPhase]               = useState<Phase>('watching')
+  const [cameraReady, setCameraReady]   = useState(false)
   const [framesCaptured, setFramesCaptured]     = useState(0)
   const [showMoveCloserHint, setShowMoveCloserHint] = useState(false)
   const [scoreResult, setScoreResult]   = useState<ScoreBreakdown | null>(null)
@@ -524,26 +557,42 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
         <div className="font-bold text-white text-base">{task.title}</div>
         <p className="text-sm mt-1" style={{ color: '#9ca3af' }}>{task.description}</p>
 
+        {/* Preloaded as soon as this task exists in the module (not gated on isActive) so
+            the MediaPipe model is already warm by the time the user reaches this task —
+            visually hidden until then, but the camera/model keep initializing in the background. */}
+        {hasCam && !isComplete && (
+          <div className={isActive ? 'mt-5' : 'h-0 w-0 overflow-hidden opacity-0'}>
+            <CameraPanel
+              onLandmarksRef={onLandmarksRef}
+              captureMode={phase === 'capturing'}
+              framesCaptured={framesCaptured}
+              targetFrames={TARGET_FRAMES}
+              showMoveCloserHint={showMoveCloserHint}
+              onReadyChange={setCameraReady}
+            />
+          </div>
+        )}
+
         {isActive && (
           <div className="mt-5">
             {hasCam ? (
               <>
-                <CameraPanel
-                  onLandmarksRef={onLandmarksRef}
-                  captureMode={phase === 'capturing'}
-                  framesCaptured={framesCaptured}
-                  targetFrames={TARGET_FRAMES}
-                  showMoveCloserHint={showMoveCloserHint}
-                />
-
                 {phase === 'watching' && (
-                  <button
-                    onClick={startAssessment}
-                    className="mt-4 flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90"
-                    style={{ background: 'linear-gradient(135deg,#18e5f0,#b86cff)', color: 'white' }}
-                  >
-                    <Camera size={15} /> Start Assessment
-                  </button>
+                  cameraReady ? (
+                    <button
+                      onClick={startAssessment}
+                      className="mt-4 flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90"
+                      style={{ background: 'linear-gradient(135deg,#18e5f0,#b86cff)', color: 'white' }}
+                    >
+                      <Camera size={15} /> Start Assessment
+                    </button>
+                  ) : (
+                    <div className="mt-4 flex items-center gap-2 text-sm" style={{ color: '#6b7280' }}>
+                      <div className="w-4 h-4 rounded-full border-2 border-transparent animate-spin"
+                        style={{ borderTopColor: '#18e5f0' }} />
+                      Loading hand-tracking model…
+                    </div>
+                  )
                 )}
 
                 {phase === 'capturing' && !busy && (
