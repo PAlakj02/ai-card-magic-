@@ -10,9 +10,9 @@ export default function CoursePathScreen() {
   const avatarSeed = firebaseUser?.uid?.slice(0, 8) ?? 'default'
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
+    <div className="p-4 sm:p-8 max-w-2xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-10">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
         <div>
           <h1 className="text-2xl font-bold text-white">Master&apos;s Journey</h1>
           <p className="text-sm mt-1" style={{ color: '#6b7280' }}>Your path to card mastery</p>

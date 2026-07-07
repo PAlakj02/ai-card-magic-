@@ -45,8 +45,8 @@ export default function FeedbackScreen() {
   const title = rankTitle(level)
 
   return (
-    <div className="p-8 max-w-[900px]">
-      <h1 className="text-3xl font-bold text-white mb-2">Mastery Report</h1>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-[900px]">
+      <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Mastery Report</h1>
       <p className="mb-8 text-sm" style={{ color: '#9ca3af' }}>
         Your real-time performance analysis based on the last {scores.length > 0 ? scores.length : 5} assessments.
       </p>
@@ -65,7 +65,7 @@ export default function FeedbackScreen() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Score ring */}
           <div className="rounded-2xl p-8 flex flex-col items-center justify-center gap-5"
             style={{ background: '#171c24', border: '1px solid #2a3038' }}>

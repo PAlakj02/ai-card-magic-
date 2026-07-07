@@ -45,11 +45,11 @@ export default function HomeScreen({ onNavigate }: Props) {
   const hasAnyBadge = earnedSet.size > 0
 
   return (
-    <div className="p-8 max-w-[1200px] mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-[1200px] mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">
             Welcome back, {userData?.displayName ?? 'Magician'}.
           </h1>
           <div className="flex items-center gap-3 mt-3 flex-wrap">
@@ -67,7 +67,7 @@ export default function HomeScreen({ onNavigate }: Props) {
             </span>
           </div>
         </div>
-        <div className="flex gap-6 text-right">
+        <div className="flex gap-6 sm:text-right">
           <div>
             <div className="text-[10px] font-semibold tracking-widest" style={{ color: '#6b7280' }}>CURRENT XP</div>
             <div className="text-2xl font-bold text-white mt-0.5">{dashboardXP.toLocaleString()}</div>
@@ -80,14 +80,14 @@ export default function HomeScreen({ onNavigate }: Props) {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {liveStatCards.map(c => <StatCard key={c.label} {...c} />)}
       </div>
 
       {/* Featured + Progress */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div
-          className="col-span-2 rounded-2xl overflow-hidden relative cursor-pointer group"
+          className="lg:col-span-2 rounded-2xl overflow-hidden relative cursor-pointer group"
           style={{ background: '#171c24', border: '1px solid #2a3038', minHeight: 240 }}
           onClick={() => onNavigate('video-lesson')}
         >

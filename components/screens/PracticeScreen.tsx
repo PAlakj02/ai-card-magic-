@@ -1,12 +1,14 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { CheckCircle2, Lock, PlayCircle, Camera, Check, RefreshCw, ChevronLeft, VideoOff, AlertCircle } from 'lucide-react'
+import { CheckCircle2, Lock, PlayCircle, Camera, Check, RefreshCw, ChevronLeft, VideoOff, AlertCircle, Square } from 'lucide-react'
 import { practiceModules } from '@/data/mockData'
 import type { PracticeModuleData, Task } from '@/data/mockData'
 import { scoreMovement } from '@/lib/scoreMovement'
 import type { LandmarkPoint } from '@/lib/scoreMovement'
-import { computeAverageMetrics, scoreDoubleLift } from '@/lib/handScoring'
+import { scoreSession } from '@/lib/keypointSimilarity'
 import type { ScoreBreakdown } from '@/lib/handScoring'
+import { saveSession } from '@/lib/sessions'
+import type { SessionFrame } from '@/lib/sessions'
 import { useAuth } from '@/context/AuthContext'
 import {
   addCompletedTask, addXP, saveAssessmentScore, fetchUserDocument,
@@ -14,6 +16,8 @@ import {
 } from '@/lib/authActions'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+
+const SAMPLE_INTERVAL_MS = 100 // throttle stored keypoint frames to ~10fps
 
 // ── MediaPipe type interfaces ─────────────────────────────────────────────────
 interface MPHandsResults {
@@ -38,7 +42,7 @@ interface MPDrawingModule {
 function useHandTracking(
   videoEl: HTMLVideoElement | null,
   canvasEl: HTMLCanvasElement | null,
-  onLandmarksRef: React.MutableRefObject<((lm: LandmarkPoint[]) => void) | null>,
+  onLandmarksRef: React.MutableRefObject<((hands: LandmarkPoint[][]) => void) | null>,
 ) {
   const [accuracy, setAccuracy] = useState(0)
   const [feedback, setFeedback] = useState('Initializing hand tracking…')
@@ -60,7 +64,7 @@ function useHandTracking(
         const hands = new Hands({
           locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${f}`,
         })
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 })
+        hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 })
 
         hands.onResults((results: MPHandsResults) => {
           if (cancelled || !canvasEl) return
@@ -72,8 +76,7 @@ function useHandTracking(
               drawConnectors(ctx, lm, HAND_CONNECTIONS, { color: '#18e5f0', lineWidth: 2 })
               drawLandmarks(ctx, lm, { color: '#35e98b', lineWidth: 1, radius: 4 })
             }
-            const lm = results.multiHandLandmarks[0] as LandmarkPoint[]
-            onLandmarksRef.current?.(lm)
+            onLandmarksRef.current?.(results.multiHandLandmarks as LandmarkPoint[][])
             const result = scoreMovement(results.multiHandLandmarks)
             setAccuracy(result.accuracy)
             setFeedback(result.feedback)
@@ -107,7 +110,7 @@ function useHandTracking(
 
 // ── Camera Panel ──────────────────────────────────────────────────────────────
 interface CameraPanelProps {
-  onLandmarksRef: React.MutableRefObject<((lm: LandmarkPoint[]) => void) | null>
+  onLandmarksRef: React.MutableRefObject<((hands: LandmarkPoint[][]) => void) | null>
   captureMode:   boolean
   countdown:     number
 }
@@ -291,15 +294,13 @@ function ScoreCard({
         </div>
       )}
 
-      {tier !== 'excellent' && (
-        <button
-          onClick={onRetry}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-80"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'white' }}
-        >
-          <RefreshCw size={14} /> Try Again
-        </button>
-      )}
+      <button
+        onClick={onRetry}
+        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-80"
+        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'white' }}
+      >
+        <RefreshCw size={14} /> Redo
+      </button>
     </div>
   )
 }
@@ -328,28 +329,41 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
   const [busy, setBusy]                 = useState(false)
   const [assessmentError, setAssessmentError] = useState('')
 
-  const frameBufferRef = useRef<LandmarkPoint[][]>([])
-  const onLandmarksRef = useRef<((lm: LandmarkPoint[]) => void) | null>(null)
+  const frameBufferRef  = useRef<SessionFrame[]>([])
+  const captureStartRef = useRef(0)
+  const lastSampleRef   = useRef(0)
+  const cancelRef       = useRef(false)
+  const onLandmarksRef  = useRef<((hands: LandmarkPoint[][]) => void) | null>(null)
 
   useEffect(() => {
     if (phase === 'capturing') {
-      onLandmarksRef.current = (lm) => { frameBufferRef.current.push(lm) }
+      onLandmarksRef.current = (hands) => {
+        const now = Date.now()
+        if (now - lastSampleRef.current < SAMPLE_INTERVAL_MS) return
+        lastSampleRef.current = now
+        frameBufferRef.current.push({ t: now - captureStartRef.current, hands })
+      }
     } else {
       onLandmarksRef.current = null
     }
   }, [phase])
 
   async function startAssessment() {
+    cancelRef.current = false
     frameBufferRef.current = []
+    captureStartRef.current = Date.now()
+    lastSampleRef.current = 0
     setScoreResult(null)
     setNewBadgeIds([])
     setAssessmentError('')
     setPhase('capturing')
 
     for (let t = 3; t >= 1; t--) {
+      if (cancelRef.current) return
       setCountdown(t)
       await new Promise(r => setTimeout(r, 1000))
     }
+    if (cancelRef.current) return
     setCountdown(0)
 
     setBusy(true)
@@ -357,12 +371,18 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
       const refSnap   = await getDoc(doc(db, 'references', trickName))
       const reference = refSnap.exists() ? (refSnap.data() as Record<string, unknown>) : null
 
-      const metrics = computeAverageMetrics(frameBufferRef.current)
-      const result  = scoreDoubleLift(metrics, reference)
-      const xp      = result.tier === 'excellent' ? 100 : result.tier === 'good' ? 50 : 25
+      const capturedFrames = frameBufferRef.current
+      const result = scoreSession(capturedFrames.map(f => f.hands), reference)
+      const xp     = result.tier === 'excellent' ? 100 : result.tier === 'good' ? 50 : 25
       setXpAwarded(xp)
 
       if (firebaseUser) {
+        await saveSession(firebaseUser.uid, {
+          trickName,
+          frames: capturedFrames,
+          score:  result.score,
+          tier:   result.tier,
+        })
         await saveAssessmentScore(firebaseUser.uid, {
           trickName,
           score:    result.score,
@@ -395,6 +415,12 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
       setBusy(false)
       setPhase('result')
     }
+  }
+
+  function stopAssessment() {
+    cancelRef.current = true
+    setCountdown(3)
+    setPhase('watching')
   }
 
   function retry() {
@@ -453,7 +479,17 @@ function TaskRow({ task, moduleId, trickName, onComplete }: TaskRowProps) {
                   </button>
                 )}
 
-                {busy && phase === 'result' && (
+                {phase === 'capturing' && !busy && (
+                  <button
+                    onClick={stopAssessment}
+                    className="mt-4 flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90"
+                    style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171' }}
+                  >
+                    <Square size={13} /> Stop
+                  </button>
+                )}
+
+                {busy && (
                   <div className="mt-4 flex items-center gap-2 text-sm" style={{ color: '#18e5f0' }}>
                     <div className="w-4 h-4 rounded-full border-2 border-transparent animate-spin"
                       style={{ borderTopColor: '#18e5f0' }} />
@@ -515,13 +551,18 @@ interface ModulePickerProps {
   onSelect: (m: PracticeModuleData) => void
 }
 
+// Only these 3 tricks are active for this phase — the rest stay defined in
+// mockData (so existing Firestore completedTasks IDs remain meaningful) but hidden.
+const ACTIVE_MODULE_IDS = ['double-lift', 'false-shuffle', 'charlier-cut']
+
 function ModulePicker({ onSelect }: ModulePickerProps) {
   const { userData } = useAuth()
   const completedIds = userData?.completedTasks ?? []
+  const activeModules = practiceModules.filter(m => ACTIVE_MODULE_IDS.includes(m.id))
 
   return (
-    <div className="p-8 max-w-[900px]">
-      <h1 className="text-3xl font-bold text-white mb-1">Practice</h1>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-[900px]">
+      <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1">Practice</h1>
       <p className="text-sm mb-8" style={{ color: '#9ca3af' }}>
         Choose a trick to train. Complete all 6 tasks to master it.
       </p>
@@ -536,8 +577,8 @@ function ModulePicker({ onSelect }: ModulePickerProps) {
           <div className="flex-1 h-px" style={{ background: '#2a3038' }} />
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
-          {practiceModules.map(m => {
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {activeModules.map(m => {
             const done  = completedIds.filter(id => id.startsWith(`${m.id}-`)).length
             const total = m.tasks.length
             const pct   = Math.round((done / total) * 100)
@@ -694,17 +735,26 @@ function ModuleView({ module, onBack }: ModuleViewProps) {
   }
 
   return (
-    <div className="p-8 max-w-3xl">
-      <button
-        onClick={onBack}
-        className="flex items-center gap-1.5 text-sm font-medium mb-6 transition-opacity hover:opacity-70"
-        style={{ color: '#9ca3af' }}
-      >
-        <ChevronLeft size={16} /> All Tricks
-      </button>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl">
+      <div className="flex items-center justify-between mb-6 gap-4">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-sm font-medium transition-opacity hover:opacity-70"
+          style={{ color: '#9ca3af' }}
+        >
+          <ChevronLeft size={16} /> All Tricks
+        </button>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-opacity hover:opacity-80"
+          style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)', color: '#f87171' }}
+        >
+          End Session
+        </button>
+      </div>
 
       {/* Module header */}
-      <div className="flex items-start justify-between mb-7">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-7">
         <div>
           <div className="flex items-center gap-3 mb-2">
             <span className="text-2xl">{module.emoji}</span>
@@ -719,7 +769,7 @@ function ModuleView({ module, onBack }: ModuleViewProps) {
           <p className="text-sm mt-1 max-w-lg" style={{ color: '#9ca3af' }}>{module.tagline}</p>
         </div>
 
-        <div className="rounded-2xl p-4 text-center shrink-0 ml-6"
+        <div className="rounded-2xl p-4 text-center shrink-0 sm:ml-6"
           style={{ background: '#171c24', border: '1px solid #2a3038', minWidth: 130 }}>
           <div className="text-[10px] font-semibold tracking-widest" style={{ color: '#6b7280' }}>PROGRESS</div>
           <div className="text-3xl font-bold text-white mt-1">

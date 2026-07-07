@@ -31,7 +31,7 @@ export default function VideoLessonScreen({ youtubeId: propYoutubeId, onNavigate
     : []
 
   return (
-    <div className="flex gap-6 p-8" style={{ maxWidth: 1200, margin: '0 auto' }}>
+    <div className="flex flex-col lg:flex-row gap-6 p-4 sm:p-8" style={{ maxWidth: 1200, margin: '0 auto' }}>
       {/* ── Main ── */}
       <div className="flex-1 min-w-0">
         {/* YouTube embed */}
@@ -91,7 +91,7 @@ export default function VideoLessonScreen({ youtubeId: propYoutubeId, onNavigate
 
         {/* Tab content */}
         {tab === 'Description' && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="rounded-2xl p-5" style={{ background: '#171c24', border: '1px solid #2a3038' }}>
               <div className="flex items-center gap-2 mb-3 text-sm font-semibold text-white">
                 <Zap size={14} style={{ color: '#18e5f0' }} /> Overview
@@ -149,7 +149,7 @@ export default function VideoLessonScreen({ youtubeId: propYoutubeId, onNavigate
       </div>
 
       {/* ── Sidebar ── */}
-      <div style={{ width: 280, flexShrink: 0 }}>
+      <div className="w-full lg:w-[280px] lg:shrink-0">
         {/* Master This Move CTA */}
         <div className="rounded-2xl p-5 mb-4" style={{ background: '#171c24', border: '1px solid #2a3038' }}>
           <h3 className="text-sm font-bold text-white mb-2">Master This Move</h3>

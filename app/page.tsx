@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import AuthScreen from '@/components/auth/AuthScreen'
 import Sidebar from '@/components/layout/Sidebar'
+import MobileBottomNav from '@/components/layout/MobileBottomNav'
 import HomeScreen from '@/components/screens/HomeScreen'
 import VideoLibraryScreen from '@/components/screens/VideoLibraryScreen'
 import CoursePathScreen from '@/components/screens/CoursePathScreen'
@@ -45,7 +46,7 @@ export default function App() {
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#0d1014' }}>
       <Sidebar active={screen} onNavigate={setScreen} />
-      <main className="flex-1 overflow-y-auto" style={{ background: '#0d1014' }}>
+      <main className="flex-1 overflow-y-auto pb-16 md:pb-0" style={{ background: '#0d1014' }}>
         {screen === 'home'         && <HomeScreen onNavigate={setScreen} />}
         {screen === 'courses'      && <CoursePathScreen />}
         {screen === 'videos'       && <VideoLibraryScreen onSelectVideo={handleVideoSelect} />}
@@ -54,6 +55,7 @@ export default function App() {
         {screen === 'feedback'     && <FeedbackScreen />}
         {screen === 'profile'      && <ProfileScreen />}
       </main>
+      <MobileBottomNav active={screen} onNavigate={setScreen} />
     </div>
   )
 }

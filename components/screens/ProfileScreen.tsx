@@ -68,9 +68,9 @@ export default function ProfileScreen() {
   }
 
   return (
-    <div className="p-8 max-w-[1100px] mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-[1100px] mx-auto">
       {/* User header */}
-      <div className="rounded-2xl p-6 mb-5 flex items-center gap-6"
+      <div className="rounded-2xl p-6 mb-5 flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left"
         style={{ background: '#171c24', border: '1px solid #2a3038' }}>
         <div className="relative shrink-0">
           <div className="relative w-24 h-24 rounded-full overflow-hidden"
@@ -83,16 +83,16 @@ export default function ProfileScreen() {
           </div>
         </div>
 
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
             <h1 className="text-xl font-bold text-white">{displayName || 'Magician'}</h1>
-            <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: '#35e98b' }}>
+            <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ background: '#35e98b' }}>
               <svg width="10" height="10" viewBox="0 0 10 10">
                 <path d="M2 5l2 2 4-4" stroke="#0d1014" strokeWidth="1.5" strokeLinecap="round" fill="none" />
               </svg>
             </div>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center justify-center sm:justify-start gap-3 flex-wrap">
             <span className="px-3 py-1 rounded-full text-[11px] font-bold"
               style={{ background: 'rgba(24,229,240,0.12)', color: '#18e5f0', border: '1px solid rgba(24,229,240,0.25)' }}>
               ✦ {title.toUpperCase()}
@@ -104,15 +104,15 @@ export default function ProfileScreen() {
         </div>
 
         <button onClick={handleSignOut}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-80"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-80 shrink-0"
           style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171' }}>
           <LogOut size={14} /> Sign Out
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Left column */}
-        <div className="col-span-2 flex flex-col gap-5">
+        <div className="lg:col-span-2 flex flex-col gap-5">
           {/* Level progress */}
           <div className="rounded-2xl p-5" style={{ background: '#171c24', border: '1px solid #2a3038' }}>
             <div className="flex items-center justify-between mb-3">
