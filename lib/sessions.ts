@@ -1,6 +1,6 @@
 // Persists practice-session hand-tracking captures to Firestore under
 // users/{uid}/sessions/{sessionId}, one document per attempt (fresh doc on every Redo).
-import { addDoc, collection, Timestamp } from 'firebase/firestore'
+import { addDoc, collection, query, where, getDocs, Timestamp } from 'firebase/firestore'
 import { db } from './firebase'
 import type { LandmarkPoint } from './scoreMovement'
 
@@ -40,4 +40,39 @@ export async function saveSession(
     createdAt: Timestamp.now(),
   })
   return ref.id
+}
+
+// ── Practice heatmap (real session counts per day, straight from users/{uid}/sessions) ──
+const DAY_MS = 86_400_000
+
+function intensityFromAttempts(count: number): number {
+  if (count === 0) return 0
+  if (count === 1) return 1
+  if (count <= 3) return 2
+  return 3
+}
+
+/**
+ * Returns `days` intensity levels (0-3), oldest first, one per calendar day, ending
+ * today. Driven entirely by real users/{uid}/sessions documents — a brand-new user
+ * with zero sessions gets an all-zero (all-empty) array, never a placeholder pattern.
+ */
+export async function fetchPracticeHeatmap(uid: string, days = 35): Promise<number[]> {
+  const since = Timestamp.fromMillis(Date.now() - days * DAY_MS)
+  const q     = query(collection(db, 'users', uid, 'sessions'), where('createdAt', '>=', since))
+  const snap  = await getDocs(q)
+
+  const attemptsByDay = new Map<string, number>()
+  for (const d of snap.docs) {
+    const createdAt = (d.data() as PracticeSession).createdAt
+    const key = createdAt.toDate().toDateString()
+    attemptsByDay.set(key, (attemptsByDay.get(key) ?? 0) + 1)
+  }
+
+  const cells: number[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    const key = new Date(Date.now() - i * DAY_MS).toDateString()
+    cells.push(intensityFromAttempts(attemptsByDay.get(key) ?? 0))
+  }
+  return cells
 }

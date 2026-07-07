@@ -5,7 +5,7 @@ import {
 } from 'firebase/auth'
 import {
   doc, getDoc, setDoc, updateDoc, arrayUnion, addDoc, collection,
-  query, orderBy, limit, where, getDocs, increment, Timestamp,
+  query, orderBy, limit, getDocs, increment, Timestamp,
 } from 'firebase/firestore'
 import { auth, db }    from './firebase'
 import { levelFromXP } from './xp'
@@ -158,37 +158,6 @@ export async function fetchRecentScores(uid: string, count = 5): Promise<Assessm
   const q    = query(collection(db, 'users', uid, 'scores'), orderBy('createdAt', 'desc'), limit(count))
   const snap = await getDocs(q)
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as AssessmentScore))
-}
-
-// ── Practice heatmap (real attempt counts per day, not mock data) ─────────────
-const DAY_MS = 86_400_000
-
-function intensityFromAttempts(count: number): number {
-  if (count === 0) return 0
-  if (count === 1) return 1
-  if (count <= 3) return 2
-  return 3
-}
-
-/** Returns `days` intensity levels (0-3), oldest first, one per calendar day, ending today. */
-export async function fetchPracticeHeatmap(uid: string, days = 35): Promise<number[]> {
-  const since = Timestamp.fromMillis(Date.now() - days * DAY_MS)
-  const q     = query(collection(db, 'users', uid, 'scores'), where('createdAt', '>=', since))
-  const snap  = await getDocs(q)
-
-  const attemptsByDay = new Map<string, number>()
-  for (const d of snap.docs) {
-    const createdAt = (d.data() as AssessmentScore).createdAt
-    const key = createdAt.toDate().toDateString()
-    attemptsByDay.set(key, (attemptsByDay.get(key) ?? 0) + 1)
-  }
-
-  const cells: number[] = []
-  for (let i = days - 1; i >= 0; i--) {
-    const key = new Date(Date.now() - i * DAY_MS).toDateString()
-    cells.push(intensityFromAttempts(attemptsByDay.get(key) ?? 0))
-  }
-  return cells
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────

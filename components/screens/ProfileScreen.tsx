@@ -4,7 +4,8 @@ import Image from 'next/image'
 import { Gem, LogOut, Loader2 } from 'lucide-react'
 import BadgeIcon from '@/components/ui/BadgeIcon'
 import { useAuth } from '@/context/AuthContext'
-import { signOut, fetchRecentScores, fetchPracticeHeatmap, ALL_BADGES, type AssessmentScore } from '@/lib/authActions'
+import { signOut, fetchRecentScores, ALL_BADGES, type AssessmentScore } from '@/lib/authActions'
+import { fetchPracticeHeatmap } from '@/lib/sessions'
 import { xpProgress, rankTitle, MAX_LEVEL } from '@/lib/xp'
 
 // empty / low / medium / high — dark-theme-consistent, no bright/random greens
