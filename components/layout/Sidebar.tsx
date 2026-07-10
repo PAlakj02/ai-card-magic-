@@ -5,9 +5,10 @@ import type { Screen } from '@/data/mockData'
 interface Props {
   active: Screen
   onNavigate: (s: Screen) => void
+  onStartDailyPractice: () => void
 }
 
-export default function Sidebar({ active, onNavigate }: Props) {
+export default function Sidebar({ active, onNavigate, onStartDailyPractice }: Props) {
   return (
     <aside
       className="hidden md:flex flex-col shrink-0 h-screen w-16 lg:w-60"
@@ -49,6 +50,7 @@ export default function Sidebar({ active, onNavigate }: Props) {
       {/* CTA */}
       <div className="p-2 lg:p-4" style={{ borderTop: '1px solid #2a3038' }}>
         <button
+          onClick={onStartDailyPractice}
           title="Start Daily Practice"
           className="w-full py-3 rounded-xl text-sm font-bold text-white tracking-wide transition-opacity hover:opacity-90 active:opacity-80"
           style={{ background: 'linear-gradient(135deg, #18e5f0 0%, #b86cff 100%)' }}

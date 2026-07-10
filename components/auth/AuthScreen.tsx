@@ -9,6 +9,7 @@ interface Props {
 
 export default function AuthScreen({ onAuth }: Props) {
   const [mode, setMode]       = useState<'signin' | 'signup'>('signin')
+  const [displayName, setDisplayName] = useState('')
   const [email, setEmail]     = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -28,7 +29,7 @@ export default function AuthScreen({ onAuth }: Props) {
     try {
       const userData = mode === 'signin'
         ? await signIn(email, password)
-        : await signUp(email, password)
+        : await signUp(email, password, displayName)
       onAuth(userData)
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code ?? ''
@@ -97,6 +98,16 @@ export default function AuthScreen({ onAuth }: Props) {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          {mode === 'signup' && (
+            <input
+              type="text"
+              placeholder="Display Name"
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              required
+              style={inputStyle}
+            />
+          )}
           <input
             type="email"
             placeholder="Email"

@@ -86,9 +86,9 @@ export async function checkAndAwardBadges(
 
 // ── User document ─────────────────────────────────────────────────────────────
 
-export async function createUserDocument(uid: string, email: string): Promise<FirestoreUser> {
+export async function createUserDocument(uid: string, email: string, displayName?: string): Promise<FirestoreUser> {
   const newUser: FirestoreUser = {
-    displayName:    email.split('@')[0],
+    displayName:    displayName?.trim() || email.split('@')[0],
     level:          1,
     xp:             0,
     streak:         0,
@@ -162,9 +162,9 @@ export async function fetchRecentScores(uid: string, count = 5): Promise<Assessm
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
-export async function signUp(email: string, password: string): Promise<FirestoreUser> {
+export async function signUp(email: string, password: string, displayName?: string): Promise<FirestoreUser> {
   const cred    = await createUserWithEmailAndPassword(auth, email, password)
-  const newUser = await createUserDocument(cred.user.uid, email)
+  const newUser = await createUserDocument(cred.user.uid, email, displayName)
   const newBadgeIds = await checkAndAwardBadges(cred.user.uid, [], { isNewSignup: true })
   return newBadgeIds.length > 0
     ? { ...newUser, badges: newBadgeIds }

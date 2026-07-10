@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, Lock, PlayCircle, Camera, Check, RefreshCw, ChevronLeft, VideoOff, AlertCircle, Square } from 'lucide-react'
-import { practiceModules } from '@/data/mockData'
+import { practiceModules, ACTIVE_PRACTICE_MODULE_IDS } from '@/data/mockData'
 import type { PracticeModuleData, Task } from '@/data/mockData'
 import type { LandmarkPoint } from '@/lib/scoreMovement'
 import { scoreSession, scoreLiveFrame } from '@/lib/keypointSimilarity'
@@ -694,14 +694,10 @@ interface ModulePickerProps {
   onSelect: (m: PracticeModuleData) => void
 }
 
-// Only these 3 tricks are active for this phase — the rest stay defined in
-// mockData (so existing Firestore completedTasks IDs remain meaningful) but hidden.
-const ACTIVE_MODULE_IDS = ['double-lift', 'false-shuffle', 'charlier-cut']
-
 function ModulePicker({ onSelect }: ModulePickerProps) {
   const { userData } = useAuth()
   const completedIds = userData?.completedTasks ?? []
-  const activeModules = practiceModules.filter(m => ACTIVE_MODULE_IDS.includes(m.id))
+  const activeModules = practiceModules.filter(m => ACTIVE_PRACTICE_MODULE_IDS.includes(m.id))
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[900px]">
@@ -948,8 +944,14 @@ function ModuleView({ module, onBack }: ModuleViewProps) {
 }
 
 // ── Practice Screen ───────────────────────────────────────────────────────────
-export default function PracticeScreen() {
-  const [selectedModule, setSelectedModule] = useState<PracticeModuleData | null>(null)
+interface PracticeScreenProps {
+  initialModuleId?: string | null // auto-opens this module on mount (used by "Start Daily Practice")
+}
+
+export default function PracticeScreen({ initialModuleId }: PracticeScreenProps) {
+  const [selectedModule, setSelectedModule] = useState<PracticeModuleData | null>(() =>
+    initialModuleId ? practiceModules.find(m => m.id === initialModuleId) ?? null : null,
+  )
 
   if (selectedModule) {
     return <ModuleView module={selectedModule} onBack={() => setSelectedModule(null)} />

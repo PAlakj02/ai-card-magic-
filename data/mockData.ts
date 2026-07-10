@@ -341,6 +341,21 @@ export const practiceModules: PracticeModuleData[] = [
   },
 ]
 
+// Only these 3 tricks are active for this phase — the rest stay defined above (so
+// existing Firestore completedTasks IDs remain meaningful) but hidden from the UI.
+export const ACTIVE_PRACTICE_MODULE_IDS = ['double-lift', 'false-shuffle', 'charlier-cut']
+
+/** First active trick the user hasn't fully completed yet — falls back to the first
+ * active trick if everything's already mastered. Used by the "Start Daily Practice" CTA. */
+export function getFirstIncompleteModule(completedTasks: string[]): PracticeModuleData | null {
+  const active = practiceModules.filter(m => ACTIVE_PRACTICE_MODULE_IDS.includes(m.id))
+  for (const m of active) {
+    const doneCount = completedTasks.filter(id => id.startsWith(`${m.id}-`)).length
+    if (doneCount < m.tasks.length) return m
+  }
+  return active[0] ?? null
+}
+
 // ─── Video lesson (single video detail) ──────────────────────────────────────
 export const videoLesson = {
   ...videos[4], // "The Double Lift Masterclass"
